@@ -84,7 +84,7 @@ function bookableDates() {
 }
 
 const STORAGE_KEY = "180dc_scheduler_data";
-const emptyData = { bookings: [], closedSlots: [], memberAvail: {}, memberLinks: {} };
+const emptyData = { bookings: [], closedSlots: [], memberAvail: {}, memberLinks: {}, availSetAt: {} };
 
 /* Effective Teams link for a member: link saved in the Team Area wins,
    otherwise the one pasted in CONFIG. */
@@ -304,16 +304,26 @@ export default function App() {
   );
   const freeMembersFor = (d, t) =>
     (slotMapFor(d, data)[t] || []).filter((n) => !bookedPairs.has(`${d}|${t}|${n}`));
-  /* slots the interviewee can pick on a day: offered by the team AND not fully booked */
+  /* slots the interviewee can pick on a day: offered by the team and with capacity left.
+     Capacity = number of interviewers offering that time; fully-booked slots are
+     removed from the list entirely. */
   const openSlotsFor = (d) => Object.keys(slotMapFor(d, data)).sort(slotSort)
-    .map((t) => ({ t, free: freeMembersFor(d, t).length > 0 }));
-  const dateOpen = (d) => !closedKeys.has(d) && openSlotsFor(d).some((s) => s.free);
+    .map((t) => ({ t, left: freeMembersFor(d, t).length }))
+    .filter((s) => s.left > 0);
+  const dateOpen = (d) => !closedKeys.has(d) && openSlotsFor(d).length > 0;
 
   const confirmBooking = async ({ name, email, date, time }) => {
-    /* assign, among interviewers offering this exact slot, the one with the fewest upcoming calls */
+    /* assign among interviewers offering this exact slot who aren't booked yet:
+       priority = whoever set their availability for this day first; tie → fewest calls */
+    const setAt = data.availSetAt || {};
     const candidates = freeMembersFor(date, time);
     const load = (n) => data.bookings.filter((b) => !b.cancelled && b.interviewer === n).length;
-    const interviewer = [...candidates].sort((a, b) => load(a) - load(b))[0];
+    const interviewer = [...candidates].sort((a, b) => {
+      const ta = setAt[`${a}|${date}`] ?? Infinity;
+      const tb = setAt[`${b}|${date}`] ?? Infinity;
+      if (ta !== tb) return ta - tb;      /* first to set availability gets the call */
+      return load(a) - load(b);            /* tie: fewest upcoming calls */
+    })[0];
     const booking = {
       id: `RF-${Date.now().toString(36).toUpperCase()}`,
       name, email, date, time, interviewer,
@@ -409,7 +419,7 @@ function Book({ dateOpen, openSlotsFor, onConfirm, goHome }) {
   const submit = () => {
     if (!name.trim() || !email.trim()) return setError("Please enter your name and email to confirm.");
     if (!/^\S+@\S+\.\S+$/.test(email)) return setError("Please enter a valid email address.");
-    if (!openSlotsFor(date).some((s) => s.t === time && s.free)) {
+    if (!openSlotsFor(date).some((s) => s.t === time)) {
       setStep(2); setTime(null);
       return setError("That time was just booked — please pick another slot.");
     }
@@ -437,7 +447,7 @@ function Book({ dateOpen, openSlotsFor, onConfirm, goHome }) {
                 <button key={d} disabled={!open}
                   className={`date-card stagger${date === d ? " is-selected" : ""}`}
                   style={{ animationDelay: `${Math.min(i * 25, 400)}ms` }}
-                  onClick={() => { setDate(d); if (time && !openSlotsFor(d).some((s) => s.t === time && s.free)) setTime(null); }}>
+                  onClick={() => { setDate(d); if (time && !openSlotsFor(d).some((s) => s.t === time)) setTime(null); }}>
                   <span>{shortDay(d)}</span><b>{shortDate(d)}</b>
                 </button>
               );
@@ -451,12 +461,12 @@ function Book({ dateOpen, openSlotsFor, onConfirm, goHome }) {
           <h3 className="step-h">Pick a time <span className="muted">· {prettyDate(date)} · all times EST</span></h3>
           <p className="muted" style={{ marginTop: -6 }}>These are the times our team is available that day.</p>
           <div className="pill-grid">
-            {openSlotsFor(date).map(({ t, free }, i) => (
-              <button key={t} disabled={!free}
+            {openSlotsFor(date).map(({ t }, i) => (
+              <button key={t}
                 className={`pill stagger${time === t ? " is-selected" : ""}`}
                 style={{ animationDelay: `${Math.min(i * 25, 300)}ms` }}
                 onClick={() => setTime(t)}>
-                {t}{!free && " · booked"}
+                {t}
               </button>
             ))}
           </div>
@@ -634,19 +644,26 @@ function MyAvailabilityPanel({ data, save, user }) {
   const myDays = Object.keys(myAvail).filter((d) => dates.includes(d)).sort();
   const DEFAULT_WIN = `${10 * 60}|${16 * 60}`;
 
-  const saveAvail = (next) =>
-    save({ ...data, memberAvail: { ...(data.memberAvail || {}), [user.name]: next } });
+  const saveAvail = (next, stampDays = []) => {
+    const stamps = { ...(data.availSetAt || {}) };
+    stampDays.forEach((d) => {
+      const k = `${user.name}|${d}`;
+      if (!(k in stamps)) stamps[k] = Date.now();   /* first-set time is what counts */
+    });
+    return save({ ...data, memberAvail: { ...(data.memberAvail || {}), [user.name]: next }, availSetAt: stamps });
+  };
 
   const toggle = async (d) => {
     const next = { ...myAvail };
     if (d in next) { delete next[d]; } else { next[d] = [DEFAULT_WIN]; }
-    await saveAvail(next);
+    await saveAvail(next, d in next ? [d] : []);
   };
   const setAll = async (on) => {
     if (!on) return saveAvail({});
     const next = { ...myAvail };
-    dates.forEach((d) => { if (!(d in next)) next[d] = [DEFAULT_WIN]; });
-    await saveAvail(next);
+    const added = [];
+    dates.forEach((d) => { if (!(d in next)) { next[d] = [DEFAULT_WIN]; added.push(d); } });
+    await saveAvail(next, added);
   };
   const setWin = (d, i, startMin, endMin) => {
     const wins = [...(myAvail[d] || [])];

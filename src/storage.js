@@ -11,8 +11,8 @@
    ============================================================ */
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = "https://rgvglhrgnarzyvixnrxg.supabase.co";       // e.g. "https://abcdefgh.supabase.co"
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJndmdsaHJnbmFyenl2aXhucnhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1NzM3NjMsImV4cCI6MjEwMTE0OTc2M30.NnvvH_h_LU0Z3OvXjf2m04sgJJ2jBurR7vyddAE2U_M";  // the long "anon public" key
+const SUPABASE_URL = "";       // e.g. "https://abcdefgh.supabase.co"
+const SUPABASE_ANON_KEY = "";  // the long "anon public" key
 
 const supabase =
   SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
