@@ -60,7 +60,7 @@ const CONFIG = {
     serviceId: "service_ifxa7sj",
     templateId: "template_we57qxl",              // member interviewee email
     templateIdInterviewer: "template_10fsu3n",   // member interviewer email
-    templateIdCandidate: "",                      // PROSPECTIVE-CONSULTANT email — paste 3rd template ID here
+    templateIdCandidate: "template_9dsxr6m",                      // PROSPECTIVE-CONSULTANT email — paste 3rd template ID here
     publicKey: "k_yovKbdn3CGIEVL9",
   },
 
